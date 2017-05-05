@@ -11,25 +11,25 @@
                   (p/one-of "-_.!~*'()")))
 
 (def unreserved (p/rule "unreserved"
-                        (comp p/alphanum mark)))
+                        (p/any p/alphanum mark)))
 
 (def reserved (p/rule "reserved"
                       (p/one-of ";/?:@&=+$,")))
 
 (def uric-no-slash (p/rule "uric-no-slash"
-                           (comp unreserved
+                           (p/any unreserved
                                  escaped
                                  (p/one-of ";?:@&=+$,"))))
 
 (def uric (p/rule "uric"
-                  (comp uric-no-slash
+                  (p/any uric-no-slash
                         (p/term "/"))))
 
-(def urics (map (p/none-or-more uric) list-to-str))
+(def urics (map (p/none-or-more uric) to-str))
 
 (def opaque-part (p/rule "opaque-part"
                          (apply-to (fn [head tail]
-                                     {:opaque-part (list-to-str (cons head tail))})
+                                     {:opaque-part (to-str (cons head tail))})
                                    uric-no-slash
                                    (p/none-or-more uric))))
 
@@ -38,17 +38,17 @@
 (def query (p/rule "query" urics))
 
 (def pchar (p/rule "pchar"
-                   (comp unreserved
+                   (p/any unreserved
                          escaped
                          (p/one-of ":@&=+$,"))))
 
-(def pchars (map (p/none-or-more pchar) list-to-str))
+(def pchars (map (p/none-or-more pchar) to-str))
 
 (def param (p/rule "param" pchars))
 
 (def segment (p/rule "segment"
                      (apply-to (fn [seg param]
-                                 (list-to-str (cons seg (flatten param))))
+                                 (to-str (cons seg (flatten param))))
                                pchars
                                (p/none-or-more (p/all (p/term ";") param)))))
 
@@ -59,7 +59,7 @@
                              {:path (comp* head tail)}))))
 
 (def path (p/rule "path"
-                  (comp abs-path
+                  (p/any abs-path
                         opaque-part
                         (p/always {}))))
 
@@ -68,10 +68,10 @@
 
 (def IPv4address (p/rule "IPv4address"
                          (apply-to comp
-                                   (map (p/one-or-more p/digit) list-to-str) (p/term ".")
-                                   (map (p/one-or-more p/digit) list-to-str) (p/term ".")
-                                   (map (p/one-or-more p/digit) list-to-str) (p/term ".")
-                                   (map (p/one-or-more p/digit) list-to-str))))
+                                   (map (p/one-or-more p/digit) to-str) (p/term ".")
+                                   (map (p/one-or-more p/digit) to-str) (p/term ".")
+                                   (map (p/one-or-more p/digit) to-str) (p/term ".")
+                                   (map (p/one-or-more p/digit) to-str))))
 
 (def label-body (map (p/none-or-more (apply-to cons
                                                (p/term "-")
@@ -91,9 +91,9 @@
                                    label-body)))
 
 (defn assemble-hostname [dom-lbls top-lbl]
-  (list-to-str (reduce dom-lbls top-lbl
+  (to-str (reduce dom-lbls top-lbl
                        (fn [host-name [dom-lbl dot]]
-                         (comp dom-lbl (cons dot host-name))))))
+                         (p/any dom-lbl (cons dot host-name))))))
 
 (def hostname (p/rule "hostname"
                       (apply-to assemble-hostname
@@ -101,51 +101,51 @@
                                 toplabel)))
 
 (def host (p/rule "host"
-                  (comp hostname
+                  (p/any hostname
                         IPv4address)))
 
 (def hostport (p/rule "hostport"
-                      (comp (apply-to (fn [host port]
+                      (p/any (apply-to (fn [host port]
                                         {:host host
                                          :port port})
                                       host (p/ignore (p/term ":")) port)
                             (map host (partial hash-map :host)))))
 
 (def userinfo (p/rule "userinfo"
-                      (map (p/none-or-more (comp unreserved
+                      (map (p/none-or-more (p/any unreserved
                                                  escaped
                                                  (p/one-of "$,;:&=+")))
-                           list-to-str)))
+                           to-str)))
 
 (def server (p/rule "server"
                     (p/optional (apply-to (fn [[user-info] host]
                                             (comp user-info host))
-                                          (comp (p/all (map userinfo (partial hash-map :user))
+                                          (p/any (p/all (map userinfo (partial hash-map :user))
                                                        (p/ignore (p/term "@")))
                                                 (p/always (list {})))
                                           hostport))))
 
 (def reg-name (p/rule "reg-name"
-                      (map (p/one-or-more (comp unreserved
+                      (map (p/one-or-more (p/any unreserved
                                                 escaped
                                                 (p/one-of "$,;:@&=+")))
                            (fn [char-list]
-                             {:registry-name (list-to-str char-list)}))))
+                             {:registry-name (to-str char-list)}))))
 
 (def authority (p/rule "authority"
-                       (comp server reg-name)))
+                       (p/any server reg-name)))
 
 (def scheme (p/rule "scheme"
                     (apply-to (fn [scheme-first scheme-rest]
-                                (list-to-str (cons scheme-first scheme-rest)))
+                                (to-str (cons scheme-first scheme-rest)))
                               p/alpha
-                              (p/none-or-more (comp p/alphanum (p/one-of "+-."))))))
+                              (p/none-or-more (p/any p/alphanum (p/one-of "+-."))))))
 
 (def rel-segment (p/rule "rel-segment"
-                         (map (p/one-or-more (comp unreserved
+                         (map (p/one-or-more (p/any unreserved
                                                    escaped
                                                    (p/one-of "$,;@&=+")))
-                              list-to-str)))
+                              to-str)))
 
 (def rel-path (p/rule "rel-path"
                       (apply-to (fn [head tail]
@@ -161,18 +161,18 @@
                                 authority
                                 (p/optional abs-path))))
 
-(def uri-query (comp (map (p/all (p/ignore (p/term "?")) query)
+(def uri-query (p/any (map (p/all (p/ignore (p/term "?")) query)
                           (fn [[q]] {:query q}))
                      (p/always {})))
 
 (def hier-part (p/rule "hier-part"
                        (apply-to comp
-                                 (comp net-path abs-path)
+                                 (p/any net-path abs-path)
                                  uri-query)))
 
 (def relativeURI (p/rule "relativeURI"
                          (apply-to comp
-                                   (comp net-path
+                                   (p/any net-path
                                          abs-path
                                          rel-path)
                                    uri-query)))
@@ -182,15 +182,15 @@
                                      (assoc part :scheme scheme))
                                    scheme
                                    (p/ignore (p/term ":"))
-                                   (comp hier-part
+                                   (p/any hier-part
                                          opaque-part))))
 
 (def URI-reference (p/rule "URI-reference"
                            (apply-to comp
-                                     (comp absoluteURI
+                                     (p/any absoluteURI
                                            relativeURI
                                            (p/always {}))
-                                     (comp (map (p/all (p/ignore (p/term "#"))
+                                     (p/any (map (p/all (p/ignore (p/term "#"))
                                                        fragment)
                                                 (fn [[frag]] {:fragment frag}))
                                            (p/always {})))))
